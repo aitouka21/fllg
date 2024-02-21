@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+
+set -eo pipefail
+
+DATA_DIR="$HOME/.local/share/fllg"
+
+profile="default"
+start_time="1 day ago"
+end_time="now"
+max_items=100
+filter_pattern=""
+
+function format_date {
+  echo "$(date -d"$1" +'%s%3N')"
+}
+
+while getopts "p:s:e:m:f:" arg; do
+  case $arg in
+    p)  profile="$OPTARG"
+    ;;
+    s)  start_time="$OPTARG"
+    ;;
+    e)  end_time="$OPTARG"
+    ;;
+    m)  max_items="$OPTARG"
+    ;;
+    f)  filter_pattern="$OPTARG"
+    ;;
+  esac
+done
+
+log_group_name=$(cat "$DATA_DIR/$profile" | fzf)
+
+result=$(aws logs filter-log-events \
+  --profile "$profile" \
+  --log-group-name "$log_group_name" \
+  --max-items "$max_items" \
+  --start-time "$(format_date "$start_time")" \
+  --end-time "$(format_date "$end_time")" \
+  --filter-pattern "$filter_pattern")
+
+cmd='jq -C '"'"'.message = (.message | . as $line | try (fromjson) catch $line) '"'"'<<< {} 2>/dev/null'
+log_stream=$(echo "$result" \
+  | jq -c '.events[]' \
+  | fzf --preview-window 'right:80%:wrap' --preview "$cmd")
+
+log_stream_name=$(jq -r '.logStreamName' <<< "$log_stream")
+aws logs get-log-events \
+  --profile "$profile" \
+  --start-from-head \
+  --log-stream-name "$log_stream_name" \
+  --log-group-name "$log_group_name" \
+  | jq -C \
+  | less

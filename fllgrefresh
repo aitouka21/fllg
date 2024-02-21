@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+set -eo pipefail
+DATA_DIR="$HOME/.local/share/fllg"
+
+profile="default"
+
+if [[ -n $1 ]]; then
+  profile="$1"
+fi
+
+mkdir -p "${DATA_DIR}"
+out="$DATA_DIR/$profile"
+
+aws logs describe-log-groups --log-group-name-prefix '/aws/lambda' --profile "$profile" | jq -r '.logGroups[].logGroupName'> "$out"
+echo "Updated $out"
+
